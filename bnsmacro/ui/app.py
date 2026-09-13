@@ -1,6 +1,7 @@
 """Main window."""
 from __future__ import annotations
 
+import json
 import threading
 import time
 import tkinter as tk
@@ -17,7 +18,8 @@ from ..importer import import_legacy_folder
 from ..profile import (Probe, Profile, Rule, default_profile, format_color)
 from ..winapi import (begin_high_resolution_timer, enable_dpi_awareness,
                       end_high_resolution_timer)
-from .dialogs import (ActionDialog, ConditionDialog, HotkeyDialog, ProbeDialog)
+from .dialogs import (ActionDialog, ConditionDialog, HotkeyDialog,
+                      ProbeDialog, ProbeLayoutDialog)
 from .picker import PickerPanel
 from .widgets import ColorSwatch, ScrolledTree, hint, rgb_to_hex
 
@@ -40,10 +42,14 @@ class App(tk.Tk):
 
         self.profile_dir = Path(profile_dir)
         self.profile_dir.mkdir(parents=True, exist_ok=True)
-        self.profile: Profile = default_profile()
+        self._state_path = self.profile_dir / "_state.json"
         self._dirty = False
         self._log_lines: List[Tuple[str, str]] = []
         self._log_lock = threading.Lock()
+        self._layout: Optional[Dict] = None   # 一键铺点 in progress
+        # Booting into an empty profile made the whole window look broken on
+        # first run, with the template sitting unloaded in the dropdown.
+        self.profile: Profile = self._startup_profile()
 
         self.hotkeys = HotkeyManager()
         self.hotkeys.on_error = lambda exc: self.log(f"热键回调出错: {exc}", LOG_ERROR)
@@ -176,9 +182,15 @@ class App(tk.Tk):
         row = ttk.Frame(tab); row.pack(fill="x", pady=(6, 0))
         for text, cmd in (("新增", self._add_probe), ("编辑", self._edit_probe),
                           ("删除", self._delete_probe)):
-            ttk.Button(row, text=text, command=cmd, width=10).pack(side="left", padx=(0, 6))
-        ttk.Label(row, text="（取色器开启时按取色键会直接新增一个点）",
-                  foreground="#666666").pack(side="left", padx=8)
+            ttk.Button(row, text=text, command=cmd, width=9).pack(side="left", padx=(0, 5))
+        ttk.Button(row, text="一键铺点", command=self._start_layout, width=10
+                   ).pack(side="left", padx=(8, 5))
+        ttk.Button(row, text="清空", command=self._clear_probes, width=7
+                   ).pack(side="left")
+        self.var_probe_hint = tk.StringVar(
+            value="取色器开启时按取色键直接新增一个点")
+        ttk.Label(row, textvariable=self.var_probe_hint,
+                  foreground="#666666").pack(side="left", padx=10)
 
     # -- rules tab -----------------------------------------------------
     def _build_tab_rules(self) -> None:
@@ -262,7 +274,11 @@ class App(tk.Tk):
         row = ttk.Frame(conds); row.pack(fill="x", pady=(6, 0))
         for text, cmd in (("新增", self._add_condition), ("编辑", self._edit_condition),
                           ("删除", self._delete_condition)):
-            ttk.Button(row, text=text, command=cmd, width=8).pack(side="left", padx=(0, 5))
+            ttk.Button(row, text=text, command=cmd, width=6).pack(side="left", padx=(0, 4))
+        ttk.Button(row, text="学色(选中)", command=self._learn_selected_color,
+                   width=11).pack(side="left", padx=(8, 4))
+        ttk.Button(row, text="学色(整条)", command=self._learn_rule_colors,
+                   width=11).pack(side="left")
 
         acts = ttk.LabelFrame(parent, text="按键动作（自上而下依次执行）", padding=(8, 6))
         acts.pack(fill="both", expand=True, pady=(10, 0))
@@ -381,8 +397,50 @@ class App(tk.Tk):
     # ==================================================================
     # profile plumbing
     # ==================================================================
+    def _read_state(self) -> Dict:
+        try:
+            return json.loads(self._state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _write_state(self, **kw) -> None:
+        state = self._read_state()
+        state.update(kw)
+        try:
+            self._state_path.write_text(
+                json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+
+    def _profile_files(self) -> List[Path]:
+        """Every profile in the folder, real ones before templates."""
+        files = [f for f in sorted(self.profile_dir.glob("*.json"))
+                 if not f.name.startswith(("_", "."))]
+        return (sorted(f for f in files if ".template." not in f.name)
+                + sorted(f for f in files if ".template." in f.name))
+
+    def _startup_profile(self) -> Profile:
+        """Last thing you had open, else any profile, else the skeleton."""
+        candidates: List[Path] = []
+        last = self._read_state().get("last_profile")
+        if last:
+            candidates.append(self.profile_dir / str(last))
+        candidates += self._profile_files()
+        for path in candidates:
+            if not path.is_file():
+                continue
+            try:
+                profile = Profile.load(path)
+            except Exception as exc:
+                self.log(f"配置 {path.name} 读不了: {exc}", LOG_WARN)
+                continue
+            self.log(f"已加载配置「{profile.name}」（{path.name}）", LOG_INFO)
+            return profile
+        self.log("配置目录是空的，开了一份新配置", LOG_INFO)
+        return default_profile()
+
     def _load_profile_list(self) -> None:
-        files = sorted(p.name for p in self.profile_dir.glob("*.json"))
+        files = [f.name for f in self._profile_files()]
         self.cbo_profile["values"] = files
         if self.profile.path and self.profile.path.name in files:
             self.var_profile.set(self.profile.path.name)
@@ -400,6 +458,7 @@ class App(tk.Tk):
             messagebox.showerror("打不开", f"{name}\n\n{exc}", parent=self)
             return
         self._dirty = False
+        self._write_state(last_profile=name)
         self.engine.set_profile(self.profile)
         self._apply_profile_to_ui()
         self._rebind_hotkeys()
@@ -419,6 +478,7 @@ class App(tk.Tk):
             return self._save_profile_as()
         self.profile.save()
         self._dirty = False
+        self._write_state(last_profile=self.profile.path.name)
         self._load_profile_list()
         self.log(f"已保存 {self.profile.path.name}", LOG_INFO)
 
@@ -432,6 +492,7 @@ class App(tk.Tk):
             return
         self.profile.save(Path(path))
         self._dirty = False
+        self._write_state(last_profile=Path(path).name)
         self._load_profile_list()
         self.var_profile.set(Path(path).name)
         self.log(f"已保存 {Path(path).name}", LOG_INFO)
@@ -662,7 +723,19 @@ class App(tk.Tk):
 
     # -- probes --------------------------------------------------------
     def _on_picked(self, x: int, y: int, rgb: Tuple[int, int, int]) -> None:
-        """Picker hotkey fired: store a new probe at the cursor."""
+        """Picker hotkey fired: store a new probe, or collect a 铺点 corner."""
+        px, py = self._to_profile_coords(x, y)
+        if self._layout is not None:
+            return self._layout_pick(px, py)
+
+        probe = Probe(id=self.profile.next_probe_id(), x=px, y=py,
+                      note=format_color(rgb))
+        self.profile.probes.append(probe)
+        self._after_probe_change()
+        self.log(f"新增取色点 {probe.id} @ ({px},{py}) {format_color(rgb)}", LOG_INFO)
+
+    def _to_profile_coords(self, x: int, y: int) -> Tuple[int, int]:
+        """Screen point -> the coordinate space the profile stores."""
         target = win.find_game_window(self.profile.settings.window_title,
                                       self.profile.settings.window_class)
         anchor = win.Anchor(self.profile.settings.anchor_mode,
@@ -684,15 +757,65 @@ class App(tk.Tk):
                 self.profile.settings.window_title = target.title
             self._sync_refsize_label()
             self.var_wtitle.set(self.profile.settings.window_title)
+        return px, py
 
-        probe = Probe(id=self.profile.next_probe_id(), x=px, y=py,
-                      note=format_color(rgb))
-        self.profile.probes.append(probe)
-        self._mark_dirty()
-        self.engine.set_profile(self.profile)
-        self._refresh_probe_tree()
-        self._rebuild_live_rows()
-        self.log(f"新增取色点 {probe.id} @ ({px},{py}) {format_color(rgb)}", LOG_INFO)
+    # -- 一键铺点 ------------------------------------------------------
+    def _start_layout(self) -> None:
+        options = ProbeLayoutDialog(self, self.profile.next_probe_id()).show()
+        if not options:
+            return
+        options["points"] = []
+        self._layout = options
+        if not self.picker.running:
+            self.picker.start()
+        self.var_probe_hint.set("铺点中：对准【第一个】图标按取色键")
+        self.log(f"一键铺点：准备生成 {options['count']} 个点", LOG_INFO)
+
+    def _layout_pick(self, x: int, y: int) -> None:
+        assert self._layout is not None
+        points = self._layout["points"]
+        points.append((x, y))
+        if len(points) == 1:
+            self.var_probe_hint.set("铺点中：对准【最后一个】图标按取色键")
+            self.log(f"铺点起点 ({x},{y})", LOG_INFO)
+            return
+
+        (x0, y0), (x1, y1) = points[0], points[1]
+        count = self._layout["count"]
+        prefix, note = self._layout["prefix"], self._layout["note"]
+        self._layout = None
+        self.var_probe_hint.set("取色器开启时按取色键直接新增一个点")
+
+        used = {p.id for p in self.profile.probes}
+        steps = count - 1
+        created = []
+        for i in range(count):
+            # linear interpolation, first and last land exactly on the picks
+            px = int(round(x0 + (x1 - x0) * i / steps))
+            py = int(round(y0 + (y1 - y0) * i / steps))
+            pid, n = f"{prefix}{i + 1}", i + 1
+            while pid in used:            # never clobber an existing probe
+                n += 1
+                pid = f"{prefix}{n}"
+            used.add(pid)
+            created.append(Probe(id=pid, x=px, y=py,
+                                 note=f"{note}{i + 1}" if note else ""))
+        self.profile.probes.extend(created)
+        self._after_probe_change()
+        self.log(f"铺点完成：{created[0].id}…{created[-1].id}，"
+                 f"共 {len(created)} 个，从 ({x0},{y0}) 到 ({x1},{y1})", LOG_INFO)
+
+    def _clear_probes(self) -> None:
+        if not self.profile.probes:
+            return
+        if not messagebox.askokcancel(
+                "清空取色点",
+                f"删掉全部 {len(self.profile.probes)} 个取色点？"
+                f"引用它们的规则条件会失效。", parent=self):
+            return
+        self.profile.probes.clear()
+        self._after_probe_change()
+        self.log("已清空取色点", LOG_INFO)
 
     def _add_probe(self) -> None:
         result = ProbeDialog(self, Probe(id=self.profile.next_probe_id(), x=0, y=0),
@@ -897,6 +1020,70 @@ class App(tk.Tk):
         rule.conditions.pop(int(index))
         self._after_rule_change()
 
+    # -- 一键学色：把画面上现在的颜色写进条件 --------------------------
+    def _live_colors(self) -> Optional[Dict[str, Tuple[int, int, int]]]:
+        """One-shot read of every probe, whether or not the macro is running."""
+        try:
+            readings = self.engine.snapshot_probes()
+        except Exception as exc:
+            messagebox.showerror(
+                "读不到颜色",
+                f"{exc}\n\n游戏在独占全屏的话换成窗口模式再试。", parent=self)
+            return None
+        return {r.probe_id: r.rgb for r in readings if r.ok}
+
+    def _learn_selected_color(self) -> None:
+        rule = self._current_rule()
+        index = self.tree_conds.selected()
+        if not rule or index is None:
+            messagebox.showinfo("先选一条", "在上面的列表里选中要学色的条件。",
+                                parent=self)
+            return
+        colors = self._live_colors()
+        if colors is None:
+            return
+        cond = rule.conditions[int(index)]
+        rgb = colors.get(cond.probe)
+        if rgb is None:
+            messagebox.showwarning("没读到", f"取色点 {cond.probe} 这一轮没读到颜色。",
+                                   parent=self)
+            return
+        cond.color = format_color(rgb)
+        if cond.tolerance == 0:
+            cond.tolerance = 25      # 0 would only ever match this exact pixel
+        self._after_rule_change()
+        self.tree_conds.tree.selection_set(index)
+        self.log(f"学色: {cond.probe} = {cond.color}（容差 {cond.tolerance}）", LOG_INFO)
+
+    def _learn_rule_colors(self) -> None:
+        """Snapshot every condition of the current rule from one frame.
+
+        The point is to put the game in the state you want the rule to fire on
+        -- skill lit up, buff present -- and capture all of it at once.
+        """
+        rule = self._current_rule()
+        if not rule or not rule.conditions:
+            messagebox.showinfo("没有条件", "这条规则还没有任何取色条件。", parent=self)
+            return
+        colors = self._live_colors()
+        if colors is None:
+            return
+        learned, missed = 0, []
+        for cond in rule.conditions:
+            rgb = colors.get(cond.probe)
+            if rgb is None:
+                missed.append(cond.probe)
+                continue
+            cond.color = format_color(rgb)
+            if cond.tolerance == 0:
+                cond.tolerance = 25
+            learned += 1
+        self._after_rule_change()
+        note = f"整条学色: {rule.name or rule.id} 更新了 {learned} 个条件"
+        if missed:
+            note += f"，{len(missed)} 个没读到（{', '.join(missed)}）"
+        self.log(note, LOG_WARN if missed else LOG_INFO)
+
     def _add_action(self) -> None:
         rule = self._current_rule()
         if not rule:
@@ -1038,13 +1225,18 @@ HELP_TEXT = """\
 2.「设置」→ 填好窗口标题（点「刷新列表」能列出所有窗口），再点
    「把当前窗口尺寸设为基准」。
 
-3.「取色点」→ 点「开始取色」，把鼠标移到想监控的位置（技能图标、
-   buff 格子、血条……），按 F8 记录。每按一次就多一个取色点。
+3.「取色点」→ 点「一键铺点」，填个数量（技能栏几格就填几），然后对准
+   【第一个】图标按 F8、对准【最后一个】图标按 F8 —— 中间的点自动等距
+   铺开。技能栏是等距的，两次就够，不用一格一格点。
+   零散的点还是用「开始取色」+ F8 一个个加。
 
-4.「规则」→ 新增一条规则：
+4.「规则」→ 选中规则 → 把游戏摆成你想让它触发的样子（技能亮着、buff
+   挂着）→ 点「学色(整条)」，当前画面的颜色就写进条件了，不用手敲
+   #RRGGBB。只改一个条件就用「学色(选中)」。
    · 条件 = 哪个取色点、要什么颜色、容差多少
    · 动作 = 命中之后按什么键、按多久、中间等多久
    规则按优先级从高到低判断，命中一条就执行完并结束本轮。
+   学完色记得把规则的「启用」勾上 —— 骨架里默认全是关的。
 
 5. 回「运行」，按主开关热键（默认 Ctrl+Q）开始。
 
@@ -1075,6 +1267,13 @@ HELP_TEXT = """\
 · 取到的颜色全黑 → 游戏在独占全屏，换窗口模式。
 · 按键没反应 → 游戏可能以管理员身份运行，本程序也要用管理员身份运行。
 · 热键没反应 → 同上；另外检查热键有没有和游戏内按键撞车。
+
+为什么没有内置的职业宏
+────────────────────────────────────────────────────────
+取色点的坐标取决于你的分辨率和技能栏摆法，颜色取决于画质设置和 UI
+插件，按哪个键取决于你自己怎么绑 —— 这三样没有一样是通用的。
+所以内置的只有一份「通用骨架」：8 个技能格对应按键 1-8，坐标是占位
+值、颜色待取、规则默认全关。照上面的流程铺点 + 学色 + 启用就能用。
 
 一句话提醒
 ────────────────────────────────────────────────────────

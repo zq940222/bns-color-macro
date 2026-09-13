@@ -1,0 +1,316 @@
+{
+  "schema": 1,
+  "name": "通用骨架",
+  "game_class": "",
+  "description": "空白开局太难上手，所以给了这份骨架：8 个技能格 → 按键 1-8，优先级从上到下。坐标是 1920×1080 的占位值，颜色全是待取（容差 0 = 永不命中），所有规则默认关闭，所以直接启动它不会乱按。流程：一键铺点重铺坐标 → 把游戏摆成想触发的样子 → 学色 → 勾上启用。",
+  "settings": {
+    "tick_ms": 10,
+    "key_hold_ms": 30,
+    "key_interval_ms": 50,
+    "jitter_ms": 0,
+    "require_foreground": true,
+    "capture_mode": "desktop",
+    "scale_with_resolution": true,
+    "anchor_mode": "client",
+    "window_title": "",
+    "window_class": "",
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "hotkeys": {
+    "toggle": {
+      "key": "q",
+      "modifiers": [
+        "ctrl"
+      ],
+      "mode": "toggle",
+      "swallow": false,
+      "enabled": true
+    },
+    "panic": {
+      "key": "f12",
+      "modifiers": [],
+      "mode": "press",
+      "swallow": false,
+      "enabled": true
+    }
+  },
+  "probes": [
+    {
+      "id": "p1",
+      "x": 780,
+      "y": 1010,
+      "note": "技能格1（占位，请用一键铺点重取）"
+    },
+    {
+      "id": "p2",
+      "x": 828,
+      "y": 1010,
+      "note": "技能格2（占位，请用一键铺点重取）"
+    },
+    {
+      "id": "p3",
+      "x": 876,
+      "y": 1010,
+      "note": "技能格3（占位，请用一键铺点重取）"
+    },
+    {
+      "id": "p4",
+      "x": 924,
+      "y": 1010,
+      "note": "技能格4（占位，请用一键铺点重取）"
+    },
+    {
+      "id": "p5",
+      "x": 972,
+      "y": 1010,
+      "note": "技能格5（占位，请用一键铺点重取）"
+    },
+    {
+      "id": "p6",
+      "x": 1020,
+      "y": 1010,
+      "note": "技能格6（占位，请用一键铺点重取）"
+    },
+    {
+      "id": "p7",
+      "x": 1068,
+      "y": 1010,
+      "note": "技能格7（占位，请用一键铺点重取）"
+    },
+    {
+      "id": "p8",
+      "x": 1116,
+      "y": 1010,
+      "note": "技能格8（占位，请用一键铺点重取）"
+    }
+  ],
+  "rules": [
+    {
+      "id": "r1",
+      "name": "技能格1 亮了就按 1",
+      "enabled": false,
+      "priority": 80,
+      "match": "all",
+      "cooldown_ms": 200,
+      "conditions": [
+        {
+          "probe": "p1",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "1",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r2",
+      "name": "技能格2 亮了就按 2",
+      "enabled": false,
+      "priority": 70,
+      "match": "all",
+      "cooldown_ms": 200,
+      "conditions": [
+        {
+          "probe": "p2",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "2",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r3",
+      "name": "技能格3 亮了就按 3",
+      "enabled": false,
+      "priority": 60,
+      "match": "all",
+      "cooldown_ms": 200,
+      "conditions": [
+        {
+          "probe": "p3",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "3",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r4",
+      "name": "技能格4 亮了就按 4",
+      "enabled": false,
+      "priority": 50,
+      "match": "all",
+      "cooldown_ms": 200,
+      "conditions": [
+        {
+          "probe": "p4",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "4",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r5",
+      "name": "技能格5 亮了就按 5",
+      "enabled": false,
+      "priority": 40,
+      "match": "all",
+      "cooldown_ms": 200,
+      "conditions": [
+        {
+          "probe": "p5",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "5",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r6",
+      "name": "技能格6 亮了就按 6",
+      "enabled": false,
+      "priority": 30,
+      "match": "all",
+      "cooldown_ms": 200,
+      "conditions": [
+        {
+          "probe": "p6",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "6",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r7",
+      "name": "技能格7 亮了就按 7",
+      "enabled": false,
+      "priority": 20,
+      "match": "all",
+      "cooldown_ms": 200,
+      "conditions": [
+        {
+          "probe": "p7",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "7",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r8",
+      "name": "技能格8 亮了就按 8",
+      "enabled": false,
+      "priority": 10,
+      "match": "all",
+      "cooldown_ms": 200,
+      "conditions": [
+        {
+          "probe": "p8",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "8",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    }
+  ]
+}

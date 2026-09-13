@@ -218,6 +218,29 @@ class TestProfile(unittest.TestCase):
         issues = profile.problems()
         self.assertEqual(len(issues), 2)  # no conditions, no actions
 
+    def test_problems_flags_an_all_disabled_profile(self):
+        # the shipped skeleton is deliberately all-disabled; starting it must
+        # warn rather than silently do nothing
+        profile = Profile(probes=[Probe("p1", 0, 0)], rules=[Rule(
+            id="r1", enabled=False,
+            conditions=[Condition(probe="p1")],
+            actions=[Action(type="key", key="1")])])
+        self.assertTrue(any("都是关闭" in p for p in profile.problems()))
+
+    def test_shipped_skeleton_is_inert_but_flagged(self):
+        path = Path(__file__).resolve().parents[1] / "profiles" / "hotbar.template.json"
+        if not path.is_file():
+            self.skipTest("skeleton not present")
+        profile = Profile.load(path)
+        self.assertTrue(profile.rules, "skeleton should ship with rules")
+        self.assertFalse(any(r.enabled for r in profile.rules),
+                         "an unpicked skeleton must not fire on start")
+        for rule in profile.rules:
+            for cond in rule.conditions:
+                self.assertEqual(cond.tolerance, 0,
+                                 "unpicked colours must not match anything")
+        self.assertTrue(profile.problems(), "must warn that nothing will fire")
+
     def test_problems_flags_a_profile_with_no_rules(self):
         # otherwise it starts, says 运行中, and silently does nothing
         self.assertTrue(any("规则" in p for p in Profile().problems()))

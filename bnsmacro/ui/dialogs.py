@@ -356,3 +356,53 @@ class ProbeDialog(_Modal):
                             y=int(self.var_y.get()),
                             note=self.var_note.get().strip())
         self.destroy()
+
+
+class ProbeLayoutDialog(_Modal):
+    """Settings for 一键铺点.
+
+    A hotbar is a row of evenly spaced icons, so picking every one of them by
+    hand is pure busywork: take the first and the last, and the rest follow.
+    """
+
+    def __init__(self, master, next_id: str = "p1"):
+        super().__init__(master, "一键铺点")
+        self.var_count = tk.IntVar(value=8)
+        self.var_prefix = tk.StringVar(value=next_id.rstrip("0123456789") or "p")
+        self.var_note = tk.StringVar(value="技能格")
+
+        grid = self.body
+        ttk.Label(grid, text="数量").grid(row=0, column=0, sticky="w", pady=3)
+        ttk.Spinbox(grid, from_=2, to=40, textvariable=self.var_count, width=6
+                    ).grid(row=0, column=1, sticky="w", pady=3)
+        ttk.Label(grid, text="个（含首尾）", foreground="#666666").grid(
+            row=0, column=2, sticky="w", padx=6)
+
+        ttk.Label(grid, text="ID 前缀").grid(row=1, column=0, sticky="w", pady=3)
+        ttk.Entry(grid, textvariable=self.var_prefix, width=8).grid(
+            row=1, column=1, sticky="w", pady=3)
+
+        ttk.Label(grid, text="备注前缀").grid(row=2, column=0, sticky="w", pady=3)
+        ttk.Entry(grid, textvariable=self.var_note, width=16).grid(
+            row=2, column=1, columnspan=2, sticky="w", pady=3)
+
+        ttk.Label(grid, justify="left", foreground="#666666", wraplength=330,
+                  text="确定之后：把鼠标放到第一个图标中心按取色键，"
+                       "再放到最后一个图标中心按一次，中间的点自动等距铺开。"
+                  ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(10, 0))
+
+    def _accept(self) -> None:
+        try:
+            count = int(self.var_count.get())
+        except (tk.TclError, ValueError):
+            return
+        if count < 2:
+            from tkinter import messagebox
+            messagebox.showerror("数量太少", "至少 2 个点才谈得上铺", parent=self)
+            return
+        self.result = {
+            "count": count,
+            "prefix": self.var_prefix.get().strip() or "p",
+            "note": self.var_note.get().strip(),
+        }
+        self.destroy()
