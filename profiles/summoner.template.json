@@ -1,0 +1,239 @@
+{
+  "schema": 1,
+  "name": "召唤师 模板",
+  "game_class": "召唤师",
+  "description": "示例模板：坐标和颜色都是占位值，必须自己重新取。做法是打开「取色点」标签页，把鼠标放到技能条上对应的图标，按 F8。",
+  "settings": {
+    "tick_ms": 10,
+    "key_hold_ms": 30,
+    "key_interval_ms": 50,
+    "jitter_ms": 0,
+    "require_foreground": true,
+    "capture_mode": "desktop",
+    "scale_with_resolution": true,
+    "anchor_mode": "client",
+    "window_title": "",
+    "window_class": "",
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "hotkeys": {
+    "toggle": {
+      "key": "q",
+      "modifiers": [
+        "ctrl"
+      ],
+      "mode": "toggle",
+      "swallow": false,
+      "enabled": true
+    },
+    "hold": {
+      "key": "x2",
+      "modifiers": [],
+      "mode": "hold",
+      "swallow": false,
+      "enabled": true
+    },
+    "panic": {
+      "key": "f12",
+      "modifiers": [],
+      "mode": "press",
+      "swallow": false,
+      "enabled": true
+    }
+  },
+  "probes": [
+    {
+      "id": "p1",
+      "x": 780,
+      "y": 1010,
+      "note": "技能格1 — 亮=可用"
+    },
+    {
+      "id": "p2",
+      "x": 828,
+      "y": 1010,
+      "note": "技能格2"
+    },
+    {
+      "id": "p3",
+      "x": 876,
+      "y": 1010,
+      "note": "技能格3"
+    },
+    {
+      "id": "p4",
+      "x": 924,
+      "y": 1010,
+      "note": "技能格4"
+    },
+    {
+      "id": "p5",
+      "x": 960,
+      "y": 300,
+      "note": "目标血条 — 有目标才有颜色"
+    }
+  ],
+  "rules": [
+    {
+      "id": "r1",
+      "name": "技能1 就绪就放",
+      "enabled": true,
+      "priority": 100,
+      "match": "all",
+      "cooldown_ms": 200,
+      "conditions": [
+        {
+          "probe": "p1",
+          "color": "#C8A032",
+          "tolerance": 30,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "1",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r2",
+      "name": "技能2 就绪就放",
+      "enabled": true,
+      "priority": 90,
+      "match": "all",
+      "cooldown_ms": 200,
+      "conditions": [
+        {
+          "probe": "p2",
+          "color": "#4C8CD2",
+          "tolerance": 30,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "2",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r3",
+      "name": "连招：3 → 等 60ms → F",
+      "enabled": true,
+      "priority": 80,
+      "match": "all",
+      "cooldown_ms": 800,
+      "conditions": [
+        {
+          "probe": "p3",
+          "color": "#B43C3C",
+          "tolerance": 25,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "3",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        },
+        {
+          "type": "delay",
+          "key": "",
+          "hold_ms": 30,
+          "ms": 60,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        },
+        {
+          "type": "key",
+          "key": "f",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r4",
+      "name": "没目标就不打（示例：取反条件）",
+      "enabled": false,
+      "priority": 200,
+      "match": "all",
+      "cooldown_ms": 1000,
+      "conditions": [
+        {
+          "probe": "p5",
+          "color": "#101010",
+          "tolerance": 12,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "delay",
+          "key": "",
+          "hold_ms": 30,
+          "ms": 200,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r5",
+      "name": "兜底平A",
+      "enabled": true,
+      "priority": -100,
+      "match": "all",
+      "cooldown_ms": 120,
+      "conditions": [
+        {
+          "probe": "p4",
+          "color": "#000000",
+          "tolerance": 255,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "mouseleft",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    }
+  ]
+}

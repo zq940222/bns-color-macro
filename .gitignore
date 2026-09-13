@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+build/
+dist/
+*.spec
+.pytest_cache/
+.idea/
+.vscode/
+*.log
+
+# your own picked profiles are personal; keep the templates only
+profiles/*.json
+!profiles/*.template.json

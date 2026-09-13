@@ -1,0 +1,7 @@
+# Only one hard dependency. tkinter ships with CPython on Windows.
+numpy>=1.24
+
+# optional, for building a single-file exe:
+#   pyinstaller>=6.0
+# optional, for the screenshot helper in tools/:
+#   pillow>=10.0
