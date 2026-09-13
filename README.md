@@ -40,7 +40,7 @@
 需要 Windows + Python 3.9 以上（tkinter 是 Python 自带的，不用另装）。
 
 ```bash
-git clone https://github.com/<你的用户名>/bns-color-macro.git
+git clone https://github.com/zq940222/bns-color-macro.git
 cd bns-color-macro
 pip install -r requirements.txt
 python run.py
