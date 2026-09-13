@@ -15,7 +15,8 @@ from .. import window as win
 from ..engine import LOG_ERROR, LOG_INFO, LOG_WARN, MacroEngine
 from ..hotkey import Binding, HotkeyManager
 from ..importer import import_legacy_folder
-from ..profile import (Probe, Profile, Rule, default_profile, format_color)
+from ..profile import (Action, Probe, Profile, Rule, default_profile,
+                       format_color, parse_color)
 from ..winapi import (begin_high_resolution_timer, enable_dpi_awareness,
                       end_high_resolution_timer)
 from .dialogs import (ActionDialog, ConditionDialog, HotkeyDialog,
@@ -84,6 +85,7 @@ class App(tk.Tk):
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=8, pady=(0, 4))
         self._build_tab_run()
+        self._build_tab_skills()
         self._build_tab_probes()
         self._build_tab_rules()
         self._build_tab_settings()
@@ -159,6 +161,260 @@ class App(tk.Tk):
         self.txt_log.tag_configure(LOG_ERROR, foreground="#c0392b")
         self.txt_log.tag_configure(LOG_WARN, foreground="#b9770e")
         self.txt_log.tag_configure(LOG_INFO, foreground="#2c3e50")
+
+    # -- skills tab ----------------------------------------------------
+    def _build_tab_skills(self) -> None:
+        """A flat view of the rules: [x] 名称 [键] 尾随等待 冷却 颜色 学色.
+
+        Same data the 规则 tab edits -- one rule per skill -- but laid out
+        the way people actually use it: tick what you want, nudge a delay,
+        go.  The 规则 tab stays for anything needing several conditions or a
+        multi-step sequence.
+        """
+        tab = ttk.Frame(self.nb, padding=10)
+        self.nb.add(tab, text="  技能  ")
+
+        top = ttk.Frame(tab)
+        top.pack(fill="x")
+        ttk.Label(top, text="取色方案", style="Head.TLabel").pack(side="left")
+        self.var_plan = tk.IntVar(value=0)
+        for i in range(3):
+            ttk.Radiobutton(top, text=str(i + 1), value=i, variable=self.var_plan,
+                            command=self._switch_color_plan).pack(side="left", padx=(6, 0))
+        ttk.Label(top, text="可分别存全屏 / 窗口 / 不同装备下取的色",
+                  foreground="#666666").pack(side="left", padx=12)
+        ttk.Button(top, text="存入当前方案", command=self._store_color_plan,
+                   width=14).pack(side="right")
+
+        hint(tab, "勾上的技能才会参与。颜色没取之前别勾 —— 容差 0 的条件永远不命中，"
+                  "勾了也只是空转。流程：「取色点」页一键铺点 → 把游戏摆成要触发的样子 "
+                  "→ 点「学色」→ 再勾启用。").pack(fill="x", pady=(10, 6))
+
+        wrap = ttk.Frame(tab)
+        wrap.pack(fill="both", expand=True)
+        canvas = tk.Canvas(wrap, highlightthickness=0, background="#fbfbfb")
+        bar = ttk.Scrollbar(wrap, orient="vertical", command=canvas.yview)
+        self.skill_host = ttk.Frame(canvas)
+        self.skill_host.bind(
+            "<Configure>",
+            lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        self._skill_window = canvas.create_window((0, 0), window=self.skill_host,
+                                                  anchor="nw")
+        canvas.bind("<Configure>",
+                    lambda e: canvas.itemconfigure(self._skill_window, width=e.width))
+        canvas.configure(yscrollcommand=bar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        bar.pack(side="right", fill="y")
+        self._skill_rows: Dict[str, Dict] = {}
+
+        row = ttk.Frame(tab)
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Button(row, text="全选", width=8,
+                   command=lambda: self._toggle_all_skills(True)).pack(side="left")
+        ttk.Button(row, text="全不选", width=8,
+                   command=lambda: self._toggle_all_skills(False)).pack(side="left",
+                                                                       padx=4)
+        ttk.Button(row, text="一次学全部技能的色", width=20,
+                   command=self._learn_all_colors).pack(side="left", padx=(12, 0))
+
+    def _rebuild_skill_rows(self) -> None:
+        for child in self.skill_host.winfo_children():
+            child.destroy()
+        self._skill_rows.clear()
+        rules = self.profile.sorted_rules()
+        if not rules:
+            ttk.Label(self.skill_host,
+                      text="这份配置还没有规则。去「规则」页加，或者换一份配置。",
+                      foreground="#888888").grid(row=0, column=0, sticky="w", pady=8)
+            return
+
+        for col, text in enumerate(("启用", "技能", "按键", "尾随等待", "冷却",
+                                    "当前颜色", "")):
+            ttk.Label(self.skill_host, text=text, style="Head.TLabel").grid(
+                row=0, column=col, sticky="w", padx=(0, 10), pady=(2, 6))
+
+        self._loading_skills = True
+        try:
+            for r, rule in enumerate(rules, start=1):
+                on = tk.BooleanVar(value=rule.enabled)
+                key = tk.StringVar(value=self._rule_key(rule))
+                trail = tk.IntVar(value=self._rule_trailing_delay(rule))
+                cool = tk.IntVar(value=rule.cooldown_ms)
+
+                ttk.Checkbutton(
+                    self.skill_host, variable=on,
+                    command=lambda rid=rule.id: self._commit_skill(rid)
+                ).grid(row=r, column=0, sticky="w")
+                ttk.Label(self.skill_host, text=rule.name or rule.id, width=16
+                          ).grid(row=r, column=1, sticky="w", padx=(0, 10))
+                ttk.Entry(self.skill_host, textvariable=key, width=8).grid(
+                    row=r, column=2, sticky="w", padx=(0, 10))
+                ttk.Spinbox(self.skill_host, from_=0, to=10000, textvariable=trail,
+                            width=7,
+                            command=lambda rid=rule.id: self._commit_skill(rid)
+                            ).grid(row=r, column=3, sticky="w", padx=(0, 10))
+                ttk.Spinbox(self.skill_host, from_=0, to=60000, textvariable=cool,
+                            width=7,
+                            command=lambda rid=rule.id: self._commit_skill(rid)
+                            ).grid(row=r, column=4, sticky="w", padx=(0, 10))
+                swatch = ColorSwatch(self.skill_host, width=76, height=18)
+                swatch.grid(row=r, column=5, sticky="w", padx=(0, 10))
+                ttk.Button(self.skill_host, text="学色", width=6,
+                           command=lambda rid=rule.id: self._learn_skill(rid)
+                           ).grid(row=r, column=6, sticky="w")
+
+                for var in (key, trail, cool):
+                    var.trace_add(
+                        "write", lambda *_a, rid=rule.id: self._commit_skill(rid))
+                self._skill_rows[rule.id] = {"on": on, "key": key, "trail": trail,
+                                             "cool": cool, "swatch": swatch}
+        finally:
+            self._loading_skills = False
+        self._refresh_skill_colors()
+
+    @staticmethod
+    def _rule_key(rule: Rule) -> str:
+        for action in rule.actions:
+            if action.type in ("key", "down") and action.key:
+                return action.key
+        return ""
+
+    @staticmethod
+    def _rule_trailing_delay(rule: Rule) -> int:
+        if rule.actions and rule.actions[-1].type == "delay":
+            return rule.actions[-1].ms
+        return 0
+
+    def _commit_skill(self, rule_id: str) -> None:
+        if getattr(self, "_loading_skills", False):
+            return
+        row = self._skill_rows.get(rule_id)
+        rule = next((r for r in self.profile.rules if r.id == rule_id), None)
+        if not row or rule is None:
+            return
+        try:
+            trail, cool = int(row["trail"].get()), int(row["cool"].get())
+        except (tk.TclError, ValueError):
+            return
+        rule.enabled = bool(row["on"].get())
+        rule.cooldown_ms = max(0, cool)
+
+        new_key = row["key"].get().strip()
+        for action in rule.actions:
+            if action.type in ("key", "down") and action.key:
+                action.key = new_key
+                break
+
+        # 耗时/延迟 is modelled as a trailing wait, which blocks the loop for
+        # that long -- that is the point: the skill occupies the rotation.
+        has_trail = bool(rule.actions) and rule.actions[-1].type == "delay"
+        if trail > 0:
+            if has_trail:
+                rule.actions[-1].ms = trail
+            else:
+                rule.actions.append(Action(type="delay", ms=trail))
+        elif has_trail:
+            rule.actions.pop()
+
+        self._mark_dirty()
+        self.engine.set_profile(self.profile)
+        self._refresh_rule_tree()
+
+    def _toggle_all_skills(self, on: bool) -> None:
+        for rule in self.profile.rules:
+            rule.enabled = on
+            row = self._skill_rows.get(rule.id)
+            if row:
+                row["on"].set(on)
+        self._mark_dirty()
+        self.engine.set_profile(self.profile)
+        self._refresh_rule_tree()
+
+    def _refresh_skill_colors(self) -> None:
+        for rule in self.profile.rules:
+            row = self._skill_rows.get(rule.id)
+            if row and rule.conditions:
+                try:
+                    row["swatch"].set(parse_color(rule.conditions[0].color))
+                except ValueError:
+                    pass
+
+    def _learn_skill(self, rule_id: str) -> None:
+        rule = next((r for r in self.profile.rules if r.id == rule_id), None)
+        if rule is None or not rule.conditions:
+            return
+        colors = self._live_colors()
+        if colors is None:
+            return
+        hit = self._apply_learned(rule, colors)
+        self._after_learn(f"学色: {rule.name or rule.id} "
+                          f"{'→ ' + rule.conditions[0].color if hit else '没读到颜色'}",
+                          LOG_INFO if hit else LOG_WARN)
+
+    def _learn_all_colors(self) -> None:
+        """Snapshot every rule's colours from one frame.
+
+        Put the game in the state you want -- skills lit, buffs up -- and
+        take the lot in one go instead of 9 separate trips.
+        """
+        if not self.profile.rules:
+            return
+        if not messagebox.askokcancel(
+                "一次学全部",
+                "会把【当前画面】的颜色写进所有技能的取色条件。\n"
+                "确认游戏已经摆成你要触发的样子了？", parent=self):
+            return
+        colors = self._live_colors()
+        if colors is None:
+            return
+        learned = sum(1 for rule in self.profile.rules
+                      if self._apply_learned(rule, colors))
+        self._after_learn(
+            f"一次学色: {learned}/{len(self.profile.rules)} 条规则更新了颜色"
+            f"（存进方案 {self.profile.color_plan + 1}）",
+            LOG_INFO if learned else LOG_WARN)
+
+    def _apply_learned(self, rule: Rule, colors: Dict) -> bool:
+        changed = False
+        for cond in rule.conditions:
+            rgb = colors.get(cond.probe)
+            if rgb is None:
+                continue
+            cond.color = format_color(rgb)
+            if cond.tolerance == 0:
+                cond.tolerance = 25   # 0 would only ever match this exact pixel
+            changed = True
+        return changed
+
+    def _after_learn(self, message: str, level: str) -> None:
+        self.profile.store_color_plan()
+        self._mark_dirty()
+        self.engine.set_profile(self.profile)
+        self._refresh_skill_colors()
+        self._refresh_cond_tree()
+        self.log(message, level)
+
+    # -- 取色方案 ------------------------------------------------------
+    def _store_color_plan(self) -> None:
+        self.profile.store_color_plan()
+        self._mark_dirty()
+        self.log(f"当前颜色已存进取色方案 {self.profile.color_plan + 1}", LOG_INFO)
+
+    def _switch_color_plan(self) -> None:
+        target = int(self.var_plan.get())
+        if target == self.profile.color_plan:
+            return
+        # keep whatever is on screen before swapping it out
+        self.profile.store_color_plan()
+        applied = self.profile.load_color_plan(target)
+        self._mark_dirty()
+        self.engine.set_profile(self.profile)
+        self._refresh_skill_colors()
+        self._refresh_cond_tree()
+        self.log(f"切到取色方案 {target + 1}"
+                 f"（应用了 {applied} 个颜色）"
+                 if applied else f"切到取色方案 {target + 1}（这套还没存过色）",
+                 LOG_INFO)
 
     # -- probes tab ----------------------------------------------------
     def _build_tab_probes(self) -> None:
@@ -377,11 +633,15 @@ class App(tk.Tk):
         ttk.Checkbutton(wd, text="分辨率变化时按比例缩放坐标", variable=self.var_scale,
                         command=self._commit_settings).grid(row=4, column=0,
                                                             columnspan=2, sticky="w")
+        self.var_lrstop = tk.BooleanVar(value=False)
+        ttk.Checkbutton(wd, text="左右键停宏（按住鼠标左/右键时挂起，松开继续）",
+                        variable=self.var_lrstop, command=self._commit_settings
+                        ).grid(row=5, column=0, columnspan=3, sticky="w")
         self.var_refsize = tk.StringVar(value="")
         ttk.Label(wd, textvariable=self.var_refsize, foreground="#666666").grid(
-            row=5, column=0, columnspan=3, sticky="w", pady=(6, 0))
+            row=6, column=0, columnspan=3, sticky="w", pady=(6, 0))
         ttk.Button(wd, text="把当前窗口尺寸设为基准", width=24,
-                   command=self._set_reference_size).grid(row=6, column=0,
+                   command=self._set_reference_size).grid(row=7, column=0,
                                                           columnspan=2, sticky="w",
                                                           pady=(4, 0))
 
@@ -553,11 +813,14 @@ class App(tk.Tk):
                              else "桌面截屏(快)")
         self.var_fg.set(s.require_foreground)
         self.var_scale.set(s.scale_with_resolution)
+        self.var_lrstop.set(s.stop_on_mouse_buttons)
         self._sync_refsize_label()
         self._refresh_hotkey_labels()
         self._refresh_probe_tree()
         self._refresh_rule_tree()
         self._rebuild_live_rows()
+        self.var_plan.set(self.profile.color_plan)
+        self._rebuild_skill_rows()
 
     def _sync_refsize_label(self) -> None:
         rw, rh = self.profile.settings.reference_size
@@ -597,6 +860,9 @@ class App(tk.Tk):
         elif self.profile.rules:
             tree.selection_set(self.profile.sorted_rules()[0].id)
         self._load_rule_editor()
+        if getattr(self, "_skill_rows", None) is not None \
+                and set(self._skill_rows) != {r.id for r in self.profile.rules}:
+            self._rebuild_skill_rows()
 
     def _rebuild_live_rows(self) -> None:
         for child in self.live_host.winfo_children():
@@ -635,7 +901,9 @@ class App(tk.Tk):
         s.capture_mode = "window" if self.var_capture.get().startswith("窗口") else "desktop"
         s.require_foreground = bool(self.var_fg.get())
         s.scale_with_resolution = bool(self.var_scale.get())
+        s.stop_on_mouse_buttons = bool(self.var_lrstop.get())
         self.engine.set_profile(self.profile)
+        self._rebind_hotkeys()
         self._mark_dirty()
 
     def _refresh_windows(self) -> None:
@@ -686,12 +954,17 @@ class App(tk.Tk):
         self._rebind_hotkeys()
 
     def _rebind_hotkeys(self) -> None:
-        for name in ("toggle", "hold", "panic"):
+        for name in ("toggle", "hold", "panic", "stop_l", "stop_r"):
             self.hotkeys.remove(name)
+
+        toggle = self.profile.hotkeys.get("toggle")
+        # 单击: one press == one rotation pass, never latches anything on
+        toggle_press = (self.engine.fire_once
+                        if toggle and toggle.mode == "once" else self.engine.toggle)
         handlers = {
             # the toggle key owns the master switch; the hold key owns only
             # the trigger.  They must never write the same flag.
-            "toggle": (self.engine.toggle, None),
+            "toggle": (toggle_press, None),
             "hold": (lambda: self.engine.set_trigger(True),
                      lambda: self.engine.set_trigger(False)),
             "panic": (self._panic, None),
@@ -702,12 +975,24 @@ class App(tk.Tk):
             hk = self.profile.hotkeys.get(slot)
             if not hk or not hk.key or not hk.enabled:
                 continue
-            mode = "hold" if slot == "hold" else hk.mode
+            mode = "hold" if slot == "hold" else \
+                ("press" if hk.mode == "once" else hk.mode)
             self.hotkeys.set(Binding(
                 name=slot, key=hk.key, modifiers=hk.modifiers,
                 mode=mode, swallow=hk.swallow,
                 on_press=on_press, on_release=on_release,
             ))
+
+        # 左右键停宏 -- never swallowed: the click still has to reach the game
+        if self.profile.settings.stop_on_mouse_buttons:
+            for name, button in (("stop_l", "mouseleft"), ("stop_r", "mouseright")):
+                self.hotkeys.set(Binding(
+                    name=name, key=button, mode="hold", swallow=False,
+                    on_press=lambda: self.engine.set_suspended(True),
+                    on_release=lambda: self.engine.set_suspended(False),
+                ))
+        else:
+            self.engine.set_suspended(False)
 
     def _panic(self) -> None:
         self.engine.set_active(False)
@@ -1129,6 +1414,7 @@ class App(tk.Tk):
         self.engine.set_profile(self.profile)
         self._refresh_cond_tree()
         self._refresh_act_tree()
+        self._refresh_skill_colors()
 
     # ==================================================================
     # logging + periodic refresh
@@ -1160,6 +1446,9 @@ class App(tk.Tk):
             if status.active:
                 self.var_state.set("运行中")
                 self.lbl_state.configure(foreground="#1e8449")
+            elif self.engine.suspended:
+                self.var_state.set("已挂起")
+                self.lbl_state.configure(foreground="#b9770e")
             elif self.engine.waiting_for_trigger:
                 hold = self.profile.hotkeys.get("hold")
                 self.var_state.set(f"等待 {hold.describe()}")
@@ -1230,15 +1519,22 @@ HELP_TEXT = """\
    铺开。技能栏是等距的，两次就够，不用一格一格点。
    零散的点还是用「开始取色」+ F8 一个个加。
 
-4.「规则」→ 选中规则 → 把游戏摆成你想让它触发的样子（技能亮着、buff
-   挂着）→ 点「学色(整条)」，当前画面的颜色就写进条件了，不用手敲
-   #RRGGBB。只改一个条件就用「学色(选中)」。
+4.「技能」→ 把游戏摆成你想让它触发的样子（技能亮着、buff 挂着）→
+   点「一次学全部技能的色」，当前画面的颜色一次写进所有条件。
+   单个技能用那一行的「学色」。学完把要用的技能勾上 —— 默认全是关的。
+
+   技能页就是规则表的简化视图：勾选、改按键、调尾随等待和冷却。
+   要多个条件、多步连招，去「规则」页：
    · 条件 = 哪个取色点、要什么颜色、容差多少
    · 动作 = 命中之后按什么键、按多久、中间等多久
    规则按优先级从高到低判断，命中一条就执行完并结束本轮。
-   学完色记得把规则的「启用」勾上 —— 骨架里默认全是关的。
 
 5. 回「运行」，按主开关热键（默认 Ctrl+Q）开始。
+
+左右键停宏
+────────────────────────────────────────────────────────
+「设置」里勾上之后，按住鼠标左键或右键期间宏挂起，松开继续。转视角、
+走位、点东西的时候不会被宏抢按键。挂起不影响主开关状态。
 
 两个开关的关系
 ────────────────────────────────────────────────────────
@@ -1268,12 +1564,20 @@ HELP_TEXT = """\
 · 按键没反应 → 游戏可能以管理员身份运行，本程序也要用管理员身份运行。
 · 热键没反应 → 同上；另外检查热键有没有和游戏内按键撞车。
 
-为什么没有内置的职业宏
+内置配置
 ────────────────────────────────────────────────────────
-取色点的坐标取决于你的分辨率和技能栏摆法，颜色取决于画质设置和 UI
-插件，按哪个键取决于你自己怎么绑 —— 这三样没有一样是通用的。
-所以内置的只有一份「通用骨架」：8 个技能格对应按键 1-8，坐标是占位
-值、颜色待取、规则默认全关。照上面的流程铺点 + 学色 + 启用就能用。
+· 通用骨架    8 个技能格 → 按键 1-8
+· 灵剑-闪光   技能名/键位/耗时照抄自原版界面
+
+两份都是规则齐全、颜色待取（容差 0 = 永不命中、规则默认全关），所以
+加载后直接开宏不会乱按键。技能表能内置，颜色不能 —— 颜色取决于你的
+画质和 UI 插件，坐标取决于你的分辨率，这就是「学色」和「一键铺点」
+存在的原因。别的职业没做：手上只有灵剑这一份真实数据。
+
+取色方案 1/2/3
+────────────────────────────────────────────────────────
+同一套取色点和规则，可以存三套颜色 —— 全屏一套、窗口一套、换了装备
+一套，切过去立刻生效，不用重新取。学色会自动存进当前方案。
 
 一句话提醒
 ────────────────────────────────────────────────────────

@@ -84,6 +84,8 @@ class MacroEngine:
         self._armed = False
         self._trigger = False
         self._requires_trigger = False
+        self._suspended = False          # 左右键停宏
+        self._once = threading.Event()   # 单击：跑一轮就停
         self._active = threading.Event()
         self._abort_sequence = threading.Event()
         self._sender = Sender()
@@ -171,9 +173,30 @@ class MacroEngine:
             self._trigger = False
         self._recompute()
 
+    def set_suspended(self, suspended: bool) -> None:
+        """左右键停宏: hold a mouse button and the macro stops firing.
+
+        Keeps 武装 state, so letting go resumes -- the point is to turn the
+        camera or reposition without the rotation talking over you.
+        """
+        with self._lock:
+            if self._suspended == suspended:
+                return
+            self._suspended = suspended
+        self._recompute()
+
+    def fire_once(self) -> None:
+        """单击: evaluate exactly one pass, then go quiet again."""
+        self._once.set()
+
+    @property
+    def suspended(self) -> bool:
+        return self._suspended
+
     def _recompute(self) -> None:
         with self._lock:
-            want = self._armed and (self._trigger or not self._requires_trigger)
+            want = (self._armed and not self._suspended
+                    and (self._trigger or not self._requires_trigger))
         if want == self._active.is_set():
             return
         if want:
@@ -308,11 +331,13 @@ class MacroEngine:
         if wait > 0:
             time.sleep(wait)
 
-    def _play(self, rule: Rule) -> None:
+    def _play(self, rule: Rule, one_shot: bool = False) -> None:
         self._abort_sequence.clear()
         default_hold = self._profile.settings.key_hold_ms
         for action in rule.actions:
-            if self._abort_sequence.is_set() or not self._active.is_set():
+            if self._abort_sequence.is_set():
+                return
+            if not one_shot and not self._active.is_set():
                 return
             try:
                 self._run_action(action, default_hold)
@@ -350,8 +375,9 @@ class MacroEngine:
         fps_accum, fps_count = 0.0, 0
         last_error = ""
         while not self._stop.is_set():
-            if not self._active.is_set():
-                self._active.wait(timeout=0.1)
+            one_shot = self._once.is_set()
+            if not self._active.is_set() and not one_shot:
+                self._active.wait(timeout=0.05)
                 last_frame = time.perf_counter()
                 continue
             tick_start = time.perf_counter()
@@ -370,6 +396,10 @@ class MacroEngine:
                     last_error = str(exc)
                     self.log(f"引擎异常: {exc}", LOG_ERROR)
                 time.sleep(0.25)
+            finally:
+                # one press == one evaluation pass, hit or miss
+                if one_shot:
+                    self._once.clear()
 
             now = time.perf_counter()
             elapsed_ms = (now - tick_start) * 1000.0
@@ -449,5 +479,5 @@ class MacroEngine:
                     self.on_fire(rule)
                 except Exception:
                     pass
-            self._play(rule)
+            self._play(rule, one_shot=self._once.is_set())
             return  # one rule per tick keeps priorities meaningful

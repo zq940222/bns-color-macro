@@ -266,9 +266,9 @@ class ActionDialog(_Modal):
 
 
 class HotkeyDialog(_Modal):
-    MODES = [("toggle", "开关（按一下开，再按一下关）"),
+    MODES = [("toggle", "自动（按一下开，再按一下关）"),
              ("hold", "长按（按住才生效）"),
-             ("press", "单次触发")]
+             ("once", "单击（按一次跑一轮）")]
     MODE_LABEL = dict(MODES)
     MODE_FROM_LABEL = {v: k for k, v in MODES}
 

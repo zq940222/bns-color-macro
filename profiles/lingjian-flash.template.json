@@ -1,0 +1,421 @@
+{
+  "schema": 1,
+  "name": "灵剑-闪光",
+  "game_class": "灵剑士",
+  "description": "技能表照抄自原版 v27.1 界面（怀旧服 / 灵剑-闪光）：名称、按键、耗时和延迟都是它写的。颜色原版也不内置——它要你自己取，这里同样。坐标是 1920×1080 占位值。优先级按原版界面的排列顺序从上到下递减，自己按实际连招调。用法：一键铺点重铺坐标 → 逐条学色 → 勾启用。原版的「闪电BUFF时效 70%」没做：那需要跟踪 buff 什么时候开始，本引擎没有这个状态。",
+  "settings": {
+    "tick_ms": 10,
+    "key_hold_ms": 30,
+    "key_interval_ms": 50,
+    "jitter_ms": 0,
+    "require_foreground": true,
+    "stop_on_mouse_buttons": true,
+    "capture_mode": "desktop",
+    "scale_with_resolution": true,
+    "anchor_mode": "client",
+    "window_title": "",
+    "window_class": "",
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "hotkeys": {
+    "toggle": {
+      "key": "q",
+      "modifiers": [
+        "ctrl"
+      ],
+      "mode": "toggle",
+      "swallow": false,
+      "enabled": true
+    },
+    "hold": {
+      "key": "x2",
+      "modifiers": [],
+      "mode": "hold",
+      "swallow": false,
+      "enabled": true
+    },
+    "panic": {
+      "key": "f12",
+      "modifiers": [],
+      "mode": "press",
+      "swallow": false,
+      "enabled": true
+    }
+  },
+  "color_plan": 0,
+  "color_sets": [
+    {
+      "r1#0": "#000000",
+      "r2#0": "#000000",
+      "r3#0": "#000000",
+      "r4#0": "#000000",
+      "r5#0": "#000000",
+      "r6#0": "#000000",
+      "r7#0": "#000000",
+      "r8#0": "#000000",
+      "r9#0": "#000000"
+    },
+    {
+      "r1#0": "#000000",
+      "r2#0": "#000000",
+      "r3#0": "#000000",
+      "r4#0": "#000000",
+      "r5#0": "#000000",
+      "r6#0": "#000000",
+      "r7#0": "#000000",
+      "r8#0": "#000000",
+      "r9#0": "#000000"
+    },
+    {
+      "r1#0": "#000000",
+      "r2#0": "#000000",
+      "r3#0": "#000000",
+      "r4#0": "#000000",
+      "r5#0": "#000000",
+      "r6#0": "#000000",
+      "r7#0": "#000000",
+      "r8#0": "#000000",
+      "r9#0": "#000000"
+    }
+  ],
+  "probes": [
+    {
+      "id": "p1",
+      "x": 780,
+      "y": 1010,
+      "note": "追风剑 [2]"
+    },
+    {
+      "id": "p2",
+      "x": 828,
+      "y": 1010,
+      "note": "鬼剑令 [Z]"
+    },
+    {
+      "id": "p3",
+      "x": 876,
+      "y": 1010,
+      "note": "天隙流光 [C]"
+    },
+    {
+      "id": "p4",
+      "x": 924,
+      "y": 1010,
+      "note": "雷鸣斩 [X]"
+    },
+    {
+      "id": "p5",
+      "x": 972,
+      "y": 1010,
+      "note": "残月 [V]"
+    },
+    {
+      "id": "p6",
+      "x": 1020,
+      "y": 1010,
+      "note": "绝命斩 [V]"
+    },
+    {
+      "id": "p7",
+      "x": 1068,
+      "y": 1010,
+      "note": "山崩地裂 [3]"
+    },
+    {
+      "id": "p8",
+      "x": 1116,
+      "y": 1010,
+      "note": "雷炎闪 [F]"
+    },
+    {
+      "id": "p9",
+      "x": 1164,
+      "y": 1010,
+      "note": "拔剑 [R]"
+    }
+  ],
+  "rules": [
+    {
+      "id": "r1",
+      "name": "追风剑 [2]",
+      "enabled": false,
+      "priority": 90,
+      "match": "all",
+      "cooldown_ms": 0,
+      "conditions": [
+        {
+          "probe": "p1",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "2",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r2",
+      "name": "鬼剑令 [Z]",
+      "enabled": false,
+      "priority": 80,
+      "match": "all",
+      "cooldown_ms": 0,
+      "conditions": [
+        {
+          "probe": "p2",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "z",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r3",
+      "name": "天隙流光 [C]",
+      "enabled": false,
+      "priority": 70,
+      "match": "all",
+      "cooldown_ms": 0,
+      "conditions": [
+        {
+          "probe": "p3",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "c",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r4",
+      "name": "雷鸣斩 [X]",
+      "enabled": false,
+      "priority": 60,
+      "match": "all",
+      "cooldown_ms": 0,
+      "conditions": [
+        {
+          "probe": "p4",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "x",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r5",
+      "name": "残月 [V]",
+      "enabled": false,
+      "priority": 50,
+      "match": "all",
+      "cooldown_ms": 0,
+      "conditions": [
+        {
+          "probe": "p5",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "v",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r6",
+      "name": "绝命斩 [V]",
+      "enabled": false,
+      "priority": 40,
+      "match": "all",
+      "cooldown_ms": 0,
+      "conditions": [
+        {
+          "probe": "p6",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "v",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r7",
+      "name": "山崩地裂 [3]",
+      "enabled": false,
+      "priority": 30,
+      "match": "all",
+      "cooldown_ms": 0,
+      "conditions": [
+        {
+          "probe": "p7",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "3",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        },
+        {
+          "type": "delay",
+          "key": "",
+          "hold_ms": 30,
+          "ms": 800,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r8",
+      "name": "雷炎闪 [F]",
+      "enabled": false,
+      "priority": 20,
+      "match": "all",
+      "cooldown_ms": 0,
+      "conditions": [
+        {
+          "probe": "p8",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "f",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        },
+        {
+          "type": "delay",
+          "key": "",
+          "hold_ms": 30,
+          "ms": 130,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "id": "r9",
+      "name": "拔剑 [R]",
+      "enabled": false,
+      "priority": 10,
+      "match": "all",
+      "cooldown_ms": 0,
+      "conditions": [
+        {
+          "probe": "p9",
+          "color": "#000000",
+          "tolerance": 0,
+          "metric": "channel",
+          "negate": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "key",
+          "key": "r",
+          "hold_ms": 30,
+          "ms": 0,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        },
+        {
+          "type": "delay",
+          "key": "",
+          "hold_ms": 30,
+          "ms": 10,
+          "dx": 0,
+          "dy": 0,
+          "modifiers": []
+        }
+      ]
+    }
+  ]
+}

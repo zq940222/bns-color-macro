@@ -183,6 +183,7 @@ class Settings:
     key_interval_ms: int = 40
     jitter_ms: int = 0
     require_foreground: bool = True
+    stop_on_mouse_buttons: bool = False   # 左右键停宏：按住鼠标键时挂起
     capture_mode: str = "desktop"     # desktop | window
     scale_with_resolution: bool = True
     anchor_mode: str = "client"       # client | screen
@@ -211,6 +212,11 @@ class Profile:
     hotkeys: Dict[str, Hotkey] = field(default_factory=dict)
     probes: List[Probe] = field(default_factory=list)
     rules: List[Rule] = field(default_factory=list)
+    # 取色方案: three swappable colour sets over the same probes and rules,
+    # so 全屏 / 窗口 / 换了装备 each keep their own picked colours.
+    color_plan: int = 0
+    color_sets: List[Dict[str, str]] = field(
+        default_factory=lambda: [{}, {}, {}])
     extras: Dict[str, Any] = field(default_factory=dict)
     path: Optional[Path] = None
 
@@ -234,6 +240,37 @@ class Profile:
         while f"r{n}" in used:
             n += 1
         return f"r{n}"
+
+    # -- 取色方案 ----------------------------------------------------------
+    @staticmethod
+    def color_key(rule_id: str, index: int) -> str:
+        return f"{rule_id}#{index}"
+
+    def store_color_plan(self, plan: Optional[int] = None) -> None:
+        """Copy the live condition colours into one of the saved sets."""
+        plan = self.color_plan if plan is None else plan
+        if not 0 <= plan < len(self.color_sets):
+            return
+        bucket: Dict[str, str] = {}
+        for rule in self.rules:
+            for i, cond in enumerate(rule.conditions):
+                bucket[self.color_key(rule.id, i)] = cond.color
+        self.color_sets[plan] = bucket
+
+    def load_color_plan(self, plan: int) -> int:
+        """Apply a saved set onto the live conditions; returns how many hit."""
+        if not 0 <= plan < len(self.color_sets):
+            return 0
+        bucket = self.color_sets[plan] or {}
+        applied = 0
+        for rule in self.rules:
+            for i, cond in enumerate(rule.conditions):
+                stored = bucket.get(self.color_key(rule.id, i))
+                if stored:
+                    cond.color = stored
+                    applied += 1
+        self.color_plan = plan
+        return applied
 
     def sorted_rules(self) -> List[Rule]:
         return sorted(self.rules, key=lambda r: (-r.priority, r.id))
@@ -274,6 +311,8 @@ class Profile:
             "description": self.description,
             "settings": asdict(self.settings),
             "hotkeys": {k: asdict(v) for k, v in self.hotkeys.items()},
+            "color_plan": self.color_plan,
+            "color_sets": [dict(c) for c in self.color_sets],
             "probes": [asdict(p) for p in self.probes],
             "rules": [
                 {
@@ -291,7 +330,11 @@ class Profile:
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "Profile":
         known = {"schema", "name", "game_class", "description", "settings",
-                 "hotkeys", "probes", "rules"}
+                 "hotkeys", "probes", "rules", "color_plan", "color_sets"}
+        sets = d.get("color_sets") or []
+        sets = [dict(c) if isinstance(c, dict) else {} for c in sets][:3]
+        while len(sets) < 3:
+            sets.append({})
         return Profile(
             name=str(d.get("name", "新配置")),
             game_class=str(d.get("game_class", "")),
@@ -300,6 +343,8 @@ class Profile:
             hotkeys={k: Hotkey.from_dict(v) for k, v in (d.get("hotkeys") or {}).items()},
             probes=[Probe.from_dict(p) for p in d.get("probes", [])],
             rules=[Rule.from_dict(r) for r in d.get("rules", [])],
+            color_plan=max(0, min(2, int(d.get("color_plan", 0) or 0))),
+            color_sets=sets,
             extras={k: v for k, v in d.items() if k not in known},
         )
 
