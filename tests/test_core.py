@@ -126,6 +126,65 @@ class TestRuleMatching(unittest.TestCase):
         self.assertEqual([r.id for r in profile.sorted_rules()], ["high", "low"])
 
 
+class TestArmedVsTrigger(unittest.TestCase):
+    """The toggle key and the hold key must not share one flag.
+
+    Regression: a legacy config carries both (global_key + main_macro.hotkey),
+    and when both wrote the same boolean, releasing the hold key switched the
+    whole macro off.
+    """
+
+    def setUp(self):
+        self.engine = MacroEngine(Profile())
+
+    def test_armed_alone_runs_when_no_hold_key(self):
+        self.engine.set_armed(True)
+        self.assertTrue(self.engine.active)
+
+    def test_hold_key_gates_without_disarming(self):
+        self.engine.set_requires_trigger(True)
+        self.engine.set_armed(True)
+        self.assertFalse(self.engine.active)
+        self.assertTrue(self.engine.waiting_for_trigger)
+
+        self.engine.set_trigger(True)
+        self.assertTrue(self.engine.active)
+
+        self.engine.set_trigger(False)
+        self.assertFalse(self.engine.active)
+        self.assertTrue(self.engine.armed, "releasing the hold key must not disarm")
+
+        self.engine.set_trigger(True)
+        self.assertTrue(self.engine.active, "must resume without re-toggling")
+
+    def test_trigger_alone_does_nothing_while_disarmed(self):
+        self.engine.set_requires_trigger(True)
+        self.engine.set_trigger(True)
+        self.assertFalse(self.engine.active)
+
+    def test_toggle_flips_the_master_switch(self):
+        self.engine.toggle()
+        self.assertTrue(self.engine.armed)
+        self.engine.toggle()
+        self.assertFalse(self.engine.armed)
+
+    def test_panic_stops_even_while_trigger_is_held(self):
+        self.engine.set_requires_trigger(True)
+        self.engine.set_armed(True)
+        self.engine.set_trigger(True)
+        self.engine.set_active(False)
+        self.assertFalse(self.engine.active)
+        self.assertFalse(self.engine.armed)
+
+    def test_binding_a_hold_key_later_does_not_strand_the_macro(self):
+        self.engine.set_armed(True)
+        self.assertTrue(self.engine.active)
+        self.engine.set_requires_trigger(True)   # user assigns a hold key
+        self.assertFalse(self.engine.active)
+        self.engine.set_requires_trigger(False)  # and clears it again
+        self.assertTrue(self.engine.active)
+
+
 class TestProfile(unittest.TestCase):
     def _sample(self) -> Profile:
         return Profile(
@@ -158,6 +217,10 @@ class TestProfile(unittest.TestCase):
         profile = Profile(rules=[Rule(id="r1", name="空")])
         issues = profile.problems()
         self.assertEqual(len(issues), 2)  # no conditions, no actions
+
+    def test_problems_flags_a_profile_with_no_rules(self):
+        # otherwise it starts, says 运行中, and silently does nothing
+        self.assertTrue(any("规则" in p for p in Profile().problems()))
 
     def test_id_generators_skip_used_ids(self):
         profile = Profile(probes=[Probe("p1", 0, 0), Probe("p2", 0, 0)],

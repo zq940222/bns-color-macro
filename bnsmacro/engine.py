@@ -77,6 +77,13 @@ class MacroEngine:
         self._lock = threading.RLock()
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
+        # The macro runs only when it is BOTH armed (master switch) and, if a
+        # hold key is configured, that key is down.  Two separate flags: an
+        # earlier version let the toggle key and the hold key write the same
+        # boolean, so releasing the hold key switched the whole macro off.
+        self._armed = False
+        self._trigger = False
+        self._requires_trigger = False
         self._active = threading.Event()
         self._abort_sequence = threading.Event()
         self._sender = Sender()
@@ -130,9 +137,46 @@ class MacroEngine:
             self._capture.close()
             self._capture = None
 
-    def set_active(self, active: bool) -> None:
-        was = self._active.is_set()
-        if active:
+    # The master switch.  This is what the toggle hotkey and the big button
+    # drive; it survives the hold key going up and down.
+    def set_armed(self, armed: bool) -> None:
+        with self._lock:
+            if self._armed == armed:
+                return
+            self._armed = armed
+        self.log("宏已开启" if armed else "宏已关闭", LOG_INFO)
+        self._recompute()
+
+    def toggle(self) -> None:
+        self.set_armed(not self._armed)
+
+    # The hold key, if the profile has one.  Never touches _armed.
+    def set_trigger(self, held: bool) -> None:
+        with self._lock:
+            if self._trigger == held:
+                return
+            self._trigger = held
+        self._recompute()
+
+    def set_requires_trigger(self, required: bool) -> None:
+        """Tell the engine whether a hold key is bound at all.
+
+        With no hold key, being armed is enough to run.  With one, the macro
+        idles until it is pressed.
+        """
+        with self._lock:
+            if self._requires_trigger == required:
+                return
+            self._requires_trigger = required
+            self._trigger = False
+        self._recompute()
+
+    def _recompute(self) -> None:
+        with self._lock:
+            want = self._armed and (self._trigger or not self._requires_trigger)
+        if want == self._active.is_set():
+            return
+        if want:
             self._active.set()
         else:
             self._active.clear()
@@ -141,11 +185,20 @@ class MacroEngine:
                 self._sender.release_all()
             except InputError:
                 pass
-        if was != active:
-            self.log("宏已启动" if active else "宏已停止", LOG_INFO)
 
-    def toggle(self) -> None:
-        self.set_active(not self._active.is_set())
+    def set_active(self, active: bool) -> None:
+        """Hard stop / start, used by 急停 and by shutdown."""
+        self.set_armed(active)
+        if not active:
+            self.set_trigger(False)
+
+    @property
+    def armed(self) -> bool:
+        return self._armed
+
+    @property
+    def waiting_for_trigger(self) -> bool:
+        return self._armed and self._requires_trigger and not self._trigger
 
     @property
     def active(self) -> bool:
@@ -271,7 +324,8 @@ class MacroEngine:
     def _run_action(self, action: Action, default_hold: int) -> None:
         kind = action.type
         if kind == "delay":
-            time.sleep(self._jitter(action.ms) / 1000.0)
+            # wait() rather than sleep() so 急停 cuts a long delay short
+            self._abort_sequence.wait(self._jitter(action.ms) / 1000.0)
             return
         if kind == "move":
             self._sender.move_relative(action.dx, action.dy)

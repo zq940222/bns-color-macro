@@ -246,6 +246,8 @@ class Profile:
     def problems(self) -> List[str]:
         """Human-readable list of things that would stop the macro working."""
         issues: List[str] = []
+        if not self.rules:
+            issues.append("一条规则都没有，跑起来也不会按任何键")
         ids = [p.id for p in self.probes]
         if len(ids) != len(set(ids)):
             issues.append("取色点 ID 重复")

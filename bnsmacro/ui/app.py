@@ -26,7 +26,7 @@ REFRESH_MS = 120
 
 HOTKEY_SLOTS = [
     ("toggle", "主开关", "开/关整个宏。"),
-    ("hold", "长按触发", "按住时才跑，松开就停（可留空）。"),
+    ("hold", "长按触发", "设了它就得按住才动；留空则开了就一直跑。"),
     ("panic", "急停", "立刻停宏并松开所有按键。"),
 ]
 
@@ -510,7 +510,7 @@ class App(tk.Tk):
             var.set(hk.describe() if hk and hk.key else "未设置")
         toggle = self.profile.hotkeys.get("toggle")
         label = toggle.describe() if toggle and toggle.key else "未设置"
-        base = "停止" if self.engine.active else "启动"
+        base = "停止" if self.engine.armed else "启动"
         self.btn_run.configure(text=f"{base}  ({label})")
 
     def _refresh_probe_tree(self) -> None:
@@ -628,18 +628,23 @@ class App(tk.Tk):
         for name in ("toggle", "hold", "panic"):
             self.hotkeys.remove(name)
         handlers = {
+            # the toggle key owns the master switch; the hold key owns only
+            # the trigger.  They must never write the same flag.
             "toggle": (self.engine.toggle, None),
-            "hold": (lambda: self.engine.set_active(True),
-                     lambda: self.engine.set_active(False)),
+            "hold": (lambda: self.engine.set_trigger(True),
+                     lambda: self.engine.set_trigger(False)),
             "panic": (self._panic, None),
         }
+        hold = self.profile.hotkeys.get("hold")
+        self.engine.set_requires_trigger(bool(hold and hold.key and hold.enabled))
         for slot, (on_press, on_release) in handlers.items():
             hk = self.profile.hotkeys.get(slot)
             if not hk or not hk.key or not hk.enabled:
                 continue
+            mode = "hold" if slot == "hold" else hk.mode
             self.hotkeys.set(Binding(
                 name=slot, key=hk.key, modifiers=hk.modifiers,
-                mode=hk.mode, swallow=hk.swallow,
+                mode=mode, swallow=hk.swallow,
                 on_press=on_press, on_release=on_release,
             ))
 
@@ -649,7 +654,7 @@ class App(tk.Tk):
 
     def _toggle_macro(self) -> None:
         problems = self.profile.problems()
-        if not self.engine.active and problems:
+        if not self.engine.armed and problems:
             if not messagebox.askokcancel(
                     "配置有问题", "\n".join(problems) + "\n\n还是要启动吗？", parent=self):
                 return
@@ -968,10 +973,14 @@ class App(tk.Tk):
             if status.active:
                 self.var_state.set("运行中")
                 self.lbl_state.configure(foreground="#1e8449")
+            elif self.engine.waiting_for_trigger:
+                hold = self.profile.hotkeys.get("hold")
+                self.var_state.set(f"等待 {hold.describe()}")
+                self.lbl_state.configure(foreground="#b9770e")
             else:
                 self.var_state.set("已停止")
                 self.lbl_state.configure(foreground="#7f8c8d")
-            base = "停止" if status.active else "启动"
+            base = "停止" if self.engine.armed else "启动"
             toggle = self.profile.hotkeys.get("toggle")
             label = toggle.describe() if toggle and toggle.key else "未设置"
             self.btn_run.configure(text=f"{base}  ({label})")
@@ -1038,6 +1047,12 @@ HELP_TEXT = """\
    规则按优先级从高到低判断，命中一条就执行完并结束本轮。
 
 5. 回「运行」，按主开关热键（默认 Ctrl+Q）开始。
+
+两个开关的关系
+────────────────────────────────────────────────────────
+「主开关」管整个宏的死活，「长按触发」只管现在打不打。松开长按键不会
+把宏关掉，再按住就接着跑 —— 所以中途要走位、要读条，松手就行，不用
+重新开宏。没设长按键的话，主开关一开就一直跑。「急停」两个都关掉。
 
 调参小抄
 ────────────────────────────────────────────────────────
